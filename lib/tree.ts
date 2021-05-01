@@ -30,10 +30,24 @@ export class Tree<T> {
     private mountElement: HTMLElement;
     private renderFunction: (elem: HTMLElement, data: T, cb: () => void) => void;
 
+    private viewPort = {
+        scale: 1,
+        xOffset: 0,
+        yOffset: 0,
+    }
+
     constructor(mountElement: HTMLElement, data: TreeData<T>) {
         this.mountElement = mountElement;
         this.data = data;
         this.setRenderFunction(DEFAULT_RENDER_FUNCTION);
+
+        mountElement.addEventListener('wheel', (ev) => {            
+            const delta = -ev.deltaY;
+            const current = this.viewPort.scale;
+            const nValue = delta * 1/1000 * current;
+            this.viewPort.scale += nValue;
+            mountElement.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, 0, 0)`
+        })
     }
 
     public setRenderFunction(customRenderFunction: (nodeElement: HTMLElement, nodeData: T, cb: () => void) => void) {
