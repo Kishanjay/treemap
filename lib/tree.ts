@@ -38,15 +38,57 @@ export class Tree<T> {
 
     constructor(mountElement: HTMLElement, data: TreeData<T>) {
         this.mountElement = mountElement;
+        mountElement.style.width = "fit-content";
         this.data = data;
         this.setRenderFunction(DEFAULT_RENDER_FUNCTION);
 
-        mountElement.addEventListener('wheel', (ev) => {            
-            const delta = -ev.deltaY;
-            const current = this.viewPort.scale;
-            const nValue = delta * 1/1000 * current;
-            this.viewPort.scale += nValue;
-            mountElement.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, 0, 0)`
+        mountElement.addEventListener('wheel', (ev) => {   
+            // console.log(ev);
+            const {clientX: screenX, screenX: screenXRemainder} = ev;
+        
+            const screenWidth = Math.abs(screenX) + Math.abs(screenXRemainder);    
+            const previousScale = this.viewPort.scale;
+            const zoomFactor = 1000; // Determines how 'fast' the zooming occurs when scrolling
+            this.viewPort.scale -= ev.deltaY/zoomFactor * previousScale;
+            const scaleIncrementRatio = this.viewPort.scale / previousScale; // increase in scale
+            const mapWidth = mountElement.getBoundingClientRect().width;
+            const mapHeight = mountElement.getBoundingClientRect().height;
+            
+
+            // zoom pan method based on keeping the 'map' and 'newMap' xPos
+            // ratio consistent. e.g. showing the pixel at 0.3 of the map at
+            // screenX 10, should remain the same. Thus we calculate a ratioOffsetFix
+            // to correct this. Doesn't work as smooth as expected.
+            // IMPLEMENTATION:
+            // const xRatio = screenX / screenWidth;
+            // console.log("Visible on the screen now:");
+            // console.log(`x[0 - ${screenWidth}] @ ${screenX} (${xRatio})`);
+
+            // const xOffset = this.viewPort.xOffset;
+            // const invisibleMapWidth = mapWidth - screenWidth;
+            // const mapTouchPointRatio = (invisibleMapWidth/2 + screenX + xOffset) / mapWidth;
+            // console.log(`x[${invisibleMapWidth/2} - ${mapWidth - invisibleMapWidth/2}] @ ${invisibleMapWidth/2 + screenX} (${mapTouchPointRatio}) = map projection now`)
+
+            // const newMapWidth = mapWidth * scaleIncrementRatio;
+            // const newInvisibleMapWidth = newMapWidth - screenWidth;
+            // const newMapTouchPointRatio = (newInvisibleMapWidth/2 + screenX + xOffset) / newMapWidth
+            // console.log(`x[${newInvisibleMapWidth/2} - ${newMapWidth - newInvisibleMapWidth/2}] @ ${newInvisibleMapWidth/2 + screenX} (${newMapTouchPointRatio}) = map projection after scale up`)
+
+            // const ratioOffsetFix = (mapTouchPointRatio * newMapWidth) - newInvisibleMapWidth/2 - screenX - xOffset;
+            // this.viewPort.xOffset -= ratioOffsetFix
+
+            // better method which calculates the increase in dimensions and
+            // computes which part of this increment should be dedicated towards
+            // offsetting the start coordinates. The intuition is that we 
+            // use 100% of the increment when the furthest of from the center
+            const mapWidthDelta = (mapWidth * scaleIncrementRatio) - mapWidth;
+            const mapHeightDelta = (mapHeight*scaleIncrementRatio) - mapHeight;
+            const incrementRatioOfOffset = 1 - (screenX / (screenWidth / 2));
+
+            this.viewPort.xOffset += incrementRatioOfOffset*mapWidthDelta;
+            this.viewPort.yOffset += incrementRatioOfOffset*mapHeightDelta;
+            
+            mountElement.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, ${this.viewPort.xOffset}, ${this.viewPort.yOffset})`
         })
     }
 
@@ -79,5 +121,13 @@ export class Tree<T> {
                 
             }
         });
+    }
+}
+
+
+function assert(x, y, msg) {
+    if (x !== y){
+        console.log("ASSERTION FAILURE:", msg)
+        console.log({x, y})
     }
 }
