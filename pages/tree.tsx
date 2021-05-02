@@ -20,7 +20,7 @@ export default function Home() {
     treeObject.render();
   })
 
-  return (<div style={{display: 'flex', justifyContent: 'center'}}>
+  return (<div>
       {/* <Tree nodeData={TREE_DATA} /> */}
 
       <div ref={ref}>

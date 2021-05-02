@@ -38,9 +38,20 @@ export class Tree<T> {
 
     constructor(mountElement: HTMLElement, data: TreeData<T>) {
         this.mountElement = mountElement;
-        mountElement.style.width = "fit-content";
+        this.mountElement.innerHTML = ""; // wipe it wipe
+
+        this.mountElement.attributes.setNamedItem(document.createAttribute("tree-mount"));
+        this.mountElement.style.display = "flex";
+        this.mountElement.style.justifyContent = "center";
+
+        const treeRoot = document.createElement("div");
+        treeRoot.attributes.setNamedItem(document.createAttribute("tree-root"));
+        this.mountElement.appendChild(treeRoot);
+        treeRoot.style.width = "fit-content";
+
         this.data = data;
         this.setRenderFunction(DEFAULT_RENDER_FUNCTION);
+
 
         mountElement.addEventListener('wheel', (ev) => {   
             // console.log(ev);
@@ -83,12 +94,12 @@ export class Tree<T> {
             // use 100% of the increment when the furthest of from the center
             const mapWidthDelta = (mapWidth * scaleIncrementRatio) - mapWidth;
             const mapHeightDelta = (mapHeight*scaleIncrementRatio) - mapHeight;
-            const incrementRatioOfOffset = 1 - (screenX / (screenWidth / 2));
+            const incrementRatioOfOffset = 1 - (screenX / (screenWidth / 2)); // this should actually become relative to the mountElement
 
             this.viewPort.xOffset += incrementRatioOfOffset*mapWidthDelta;
             this.viewPort.yOffset += incrementRatioOfOffset*mapHeightDelta;
             
-            mountElement.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, ${this.viewPort.xOffset}, ${this.viewPort.yOffset})`
+            treeRoot.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, ${this.viewPort.xOffset}, ${this.viewPort.yOffset})`
         })
     }
 
@@ -97,11 +108,13 @@ export class Tree<T> {
     }
 
     public render() {
-        this.renderSubTree(this.mountElement, this.data)
+        const treeRoot = this.mountElement.querySelector('div');
+        this.renderSubTree(treeRoot, this.data)
     }
 
     private renderSubTree(parentElem: HTMLElement, subtreeData: TreeData<T>) {
         const subTreeElem = document.createElement('div');
+        subTreeElem.attributes.setNamedItem(document.createAttribute("tree-node"));
         subTreeElem.style.display = 'flex';
         subTreeElem.style.flexDirection = 'column';
         subTreeElem.style.alignItems = 'center';
