@@ -3,32 +3,13 @@ export type TreeData<T> = {
     children?: TreeData<T>[];
 };
 
-export function DEFAULT_RENDER_FUNCTION(nodeElement: HTMLElement, nodeData: any, cb: () => void) {
-    const renderElem = document.createElement('div');
-    renderElem.style.padding = "8px";
-    renderElem.style.margin = "24px";
-    renderElem.style.border = "1px solid black";
-
-    const contentElem = document.createElement('dl');
-    Object.entries(nodeData).forEach(([key, value]: [string, string]) => {
-        const term = document.createElement('dt');
-        term.innerHTML = key;
-        const description = document.createElement('dd');
-        description.innerHTML = value;
-
-        contentElem.appendChild(term);
-        contentElem.appendChild(description);
-        renderElem.appendChild(contentElem);
-    })
-    
-    nodeElement.appendChild(renderElem);
-    cb();
-}
 
 export class Tree<T> {
     private data: TreeData<T>;
     private mountElement: HTMLElement;
     private renderFunction: (elem: HTMLElement, data: T, cb: () => void) => void;
+    private dragging: boolean;
+    private dragEvent: MouseEvent;
 
     private viewPort = {
         scale: 1,
@@ -43,6 +24,18 @@ export class Tree<T> {
         this.mountElement.attributes.setNamedItem(document.createAttribute("tree-mount"));
         this.mountElement.style.display = "flex";
         this.mountElement.style.justifyContent = "center";
+        this.mountElement.style.width = "fit-content";
+        this.mountElement.style.position = "relative";
+
+
+        const debug = document.createElement('div');
+        debug.style.position = "absolute";
+        debug.style.top = "0"
+        debug.style.border = "1px solid black"
+        debug.style.margin = "8px"
+        debug.style.padding = "8px"
+        debug.innerHTML =" hello"
+        this.mountElement.parentNode.appendChild(debug);
 
         const treeRoot = document.createElement("div");
         treeRoot.attributes.setNamedItem(document.createAttribute("tree-root"));
@@ -51,54 +44,64 @@ export class Tree<T> {
 
         this.data = data;
         this.setRenderFunction(DEFAULT_RENDER_FUNCTION);
+        this.dragging = false;
+        this.mountElement.style.cursor = "grab"
 
 
-        mountElement.addEventListener('wheel', (ev) => {   
-            // console.log(ev);
-            const {clientX: screenX, screenX: screenXRemainder} = ev;
-        
-            const screenWidth = Math.abs(screenX) + Math.abs(screenXRemainder);    
+        // zoom listener
+        mountElement.addEventListener('wheel', (ev) => {           
+
+            const { clientX, clientY, screenX, screenY, movementX, movementY, offsetX, offsetY, pageX, pageY } = ev;
+            debug.innerHTML = JSON.stringify({ clientX, clientY, screenX, screenY, movementX, movementY, offsetX, offsetY, pageX, pageY }, null , 4)
+            // Calculate the new zoom level
+            const screenWidth = Math.abs(ev.clientX) + Math.abs(ev.screenX); // TODO make relative to the mountElement
+            const screenHeight = Math.abs(ev.clientY) + Math.abs(ev.screenY); // TODO make relative to the mountElement
             const previousScale = this.viewPort.scale;
             const zoomFactor = 1000; // Determines how 'fast' the zooming occurs when scrolling
             this.viewPort.scale -= ev.deltaY/zoomFactor * previousScale;
-            const scaleIncrementRatio = this.viewPort.scale / previousScale; // increase in scale
+
+            // Calculate the x and y offsets necessary to zoom in at the cursor 
+            // position
+            const scaleIncrementRatio = this.viewPort.scale / previousScale;
             const mapWidth = mountElement.getBoundingClientRect().width;
             const mapHeight = mountElement.getBoundingClientRect().height;
-            
-
-            // zoom pan method based on keeping the 'map' and 'newMap' xPos
-            // ratio consistent. e.g. showing the pixel at 0.3 of the map at
-            // screenX 10, should remain the same. Thus we calculate a ratioOffsetFix
-            // to correct this. Doesn't work as smooth as expected.
-            // IMPLEMENTATION:
-            // const xRatio = screenX / screenWidth;
-            // console.log("Visible on the screen now:");
-            // console.log(`x[0 - ${screenWidth}] @ ${screenX} (${xRatio})`);
-
-            // const xOffset = this.viewPort.xOffset;
-            // const invisibleMapWidth = mapWidth - screenWidth;
-            // const mapTouchPointRatio = (invisibleMapWidth/2 + screenX + xOffset) / mapWidth;
-            // console.log(`x[${invisibleMapWidth/2} - ${mapWidth - invisibleMapWidth/2}] @ ${invisibleMapWidth/2 + screenX} (${mapTouchPointRatio}) = map projection now`)
-
-            // const newMapWidth = mapWidth * scaleIncrementRatio;
-            // const newInvisibleMapWidth = newMapWidth - screenWidth;
-            // const newMapTouchPointRatio = (newInvisibleMapWidth/2 + screenX + xOffset) / newMapWidth
-            // console.log(`x[${newInvisibleMapWidth/2} - ${newMapWidth - newInvisibleMapWidth/2}] @ ${newInvisibleMapWidth/2 + screenX} (${newMapTouchPointRatio}) = map projection after scale up`)
-
-            // const ratioOffsetFix = (mapTouchPointRatio * newMapWidth) - newInvisibleMapWidth/2 - screenX - xOffset;
-            // this.viewPort.xOffset -= ratioOffsetFix
-
-            // better method which calculates the increase in dimensions and
-            // computes which part of this increment should be dedicated towards
-            // offsetting the start coordinates. The intuition is that we 
-            // use 100% of the increment when the furthest of from the center
             const mapWidthDelta = (mapWidth * scaleIncrementRatio) - mapWidth;
             const mapHeightDelta = (mapHeight*scaleIncrementRatio) - mapHeight;
-            const incrementRatioOfOffset = 1 - (screenX / (screenWidth / 2)); // this should actually become relative to the mountElement
-
-            this.viewPort.xOffset += incrementRatioOfOffset*mapWidthDelta;
-            this.viewPort.yOffset += incrementRatioOfOffset*mapHeightDelta;
+            // calculate what ratio of the dimension increments should be used 
+            // to alter the offsets
+            const incrementRatioOfOffsetX = 1 - (ev.clientX / (screenWidth / 2));
+            const incrementRatioOfOffsetY = (ev.clientY / (screenHeight / 2));
             
+            this.viewPort.xOffset += incrementRatioOfOffsetX*mapWidthDelta;
+            this.viewPort.yOffset += incrementRatioOfOffsetY*mapHeightDelta;
+            
+            treeRoot.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, ${this.viewPort.xOffset}, ${this.viewPort.yOffset})`
+        })
+
+        mountElement.addEventListener('mousedown', (ev) => {
+            this.dragging = true;
+            this.mountElement.style.cursor = "grabbing"
+            this.dragEvent = ev;
+        })
+
+        mountElement.addEventListener('mouseup', (ev) => {
+            this.dragging = false;
+            this.mountElement.style.cursor = "grab"
+        })
+        mountElement.addEventListener('mouseleave', (ev) => {
+            this.dragging = false;
+            this.mountElement.style.cursor = "grab"
+        })
+        mountElement.addEventListener('mousemove', (ev) => {
+            if (!this.dragging) {
+                return;
+            }
+
+            const { clientX, clientY } = this.dragEvent;
+            this.dragEvent = ev;
+            
+            this.viewPort.xOffset -= clientX - ev.clientX;
+            this.viewPort.yOffset -= clientY - ev.clientY;
             treeRoot.style.transform = `matrix(${this.viewPort.scale}, 0, 0, ${this.viewPort.scale}, ${this.viewPort.xOffset}, ${this.viewPort.yOffset})`
         })
     }
@@ -137,6 +140,28 @@ export class Tree<T> {
     }
 }
 
+
+export function DEFAULT_RENDER_FUNCTION(nodeElement: HTMLElement, nodeData: any, cb: () => void) {
+    const renderElem = document.createElement('div');
+    renderElem.style.padding = "8px";
+    renderElem.style.margin = "24px";
+    renderElem.style.border = "1px solid black";
+
+    const contentElem = document.createElement('dl');
+    Object.entries(nodeData).forEach(([key, value]: [string, string]) => {
+        const term = document.createElement('dt');
+        term.innerHTML = key;
+        const description = document.createElement('dd');
+        description.innerHTML = value;
+
+        contentElem.appendChild(term);
+        contentElem.appendChild(description);
+        renderElem.appendChild(contentElem);
+    })
+    
+    nodeElement.appendChild(renderElem);
+    cb();
+}
 
 function assert(x, y, msg) {
     if (x !== y){
